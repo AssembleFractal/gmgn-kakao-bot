@@ -5,33 +5,43 @@ app = Flask(__name__)
 
 @app.route("/webhook", methods=["POST"])
 def kakao_webhook():
-    req = request.get_json()
-    user_msg = req['userRequest']['utterance'].strip().lower()
+    try:
+        req = request.get_json()
+        user_input = req['userRequest']['utterance'].strip()
 
-    if user_msg == "ca":
+        # GMGN API 호출
         gmgn_api = "https://gmgn.network/api/pairs"
         response = requests.get(gmgn_api)
         data = response.json()
-        formatted = "\n".join([f"{d['ticker']} - {d['mc']}" for d in data[:5]])
+
+        # 입력값이 address랑 매칭되는 토큰 찾기
+        matched = next((d for d in data if d.get("ca", "").lower() == user_input.lower()), None)
+
+        if matched:
+            text = f"{matched['ticker']} - {matched['mc']}"
+        else:
+            text = f"해당 CA에 해당하는 토큰을 찾을 수 없습니다.\n입력값: {user_input}"
 
         return jsonify({
             "version": "2.0",
             "template": {
                 "outputs": [{
-                    "simpleText": {"text": f"🔥 GMGN Ticker & MC\n\n{formatted}"}
+                    "simpleText": {"text": text}
                 }]
             }
         })
 
-    else:
+    except Exception as e:
         return jsonify({
             "version": "2.0",
             "template": {
                 "outputs": [{
-                    "simpleText": {"text": "명령어를 인식하지 못했어요. 'ca'를 입력해보세요."}
+                    "simpleText": {
+                        "text": f"[오류] 서버 처리 중 문제가 발생했습니다.\n{str(e)}"
+                    }
                 }]
             }
-        })
+        }), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
