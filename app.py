@@ -1,4 +1,7 @@
+from flask import Flask, request, jsonify
 import requests
+
+app = Flask(__name__)  # ✅ Gunicorn이 찾는 Flask 인스턴스
 
 def format_market_cap(value):
     if value is None:
@@ -16,30 +19,50 @@ def get_token_info(contract_address):
     url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
     response = requests.get(url)
 
-    print("💬 Response Status:", response.status_code)
     if response.status_code != 200:
-        print("❌ API 요청 실패:", response.text)
-        return None, None
+        return None, None, None
 
     data = response.json().get("pairs")
     if not data:
-        print("❌ 해당 주소에 대한 토큰 정보 없음.")
-        return None, None
+        return None, None, None
 
-    # 첫 번째 쌍 기준으로 추출
     token_info = data[0].get("baseToken", {})
     symbol = token_info.get("symbol")
-    market_cap = data[0].get("fdv")  # Fully Diluted Valuation ≒ 시가총액
+    market_cap = format_market_cap(data[0].get("fdv"))
+    chart_url = data[0].get("url")
+    return symbol, market_cap, chart_url
 
-    market_cap_formatted = format_market_cap(market_cap)
-    return symbol, market_cap_formatted
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    body = request.get_json()
+    print("🔥 Webhook Body:", body)
 
-# 🔍 테스트 예시: JITO (Solana)
-contract = "8BtoThi2ZoXnF7QQK1Wjmh2JuBw9FjVvhnGMVZ2vpump"
-symbol, mc = get_token_info(contract)
+    # JSON 구조 방어적 접근
+    user_msg = body.get("userRequest", {}).get("utterance", "").strip()
 
-if symbol:
-    print(f"✅ Symbol: {symbol}")
-    print(f"💰 Market Cap: {mc}")
-else:
-    print("❌ 토큰 정보 확인 실패")
+    if user_msg.startswith("ca "):
+        contract = user_msg[3:].strip()
+        symbol, mc, url = get_token_info(contract)
+
+        if symbol:
+            reply = f"💎 {symbol}\n💰 Market Cap: {mc}\n📊 {url}"
+        else:
+            reply = "❌ 해당 컨트랙트 주소의 정보를 찾을 수 없습니다."
+    else:
+        reply = "📌 'ca <contract_address>' 형식으로 입력해주세요."
+
+    return jsonify({
+        "version": "2.0",
+        "template": {
+            "outputs": [
+                {
+                    "simpleText": {
+                        "text": reply
+                    }
+                }
+            ]
+        }
+    })
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)  # Render에서 필요함
