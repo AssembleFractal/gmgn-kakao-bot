@@ -1,47 +1,41 @@
-from flask import Flask, request, jsonify
 import requests
 
-app = Flask(__name__)
+def format_market_cap(value):
+    if value is None:
+        return "N/A"
+    if value >= 1_000_000_000:
+        return f"{value / 1_000_000_000:.1f}B"
+    elif value >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+    elif value >= 1_000:
+        return f"{value / 1_000:.1f}K"
+    else:
+        return f"{value:.1f}"
 
-@app.route("/webhook", methods=["POST"])
-def kakao_webhook():
-    try:
-        req = request.get_json()
-        user_input = req['userRequest']['utterance'].strip()
+def get_token_info(contract_address, api_key):
+    url = f"https://public-api.birdeye.so/public/token/{contract_address}"
 
-        # GMGN API 호출
-        gmgn_api = "https://gmgn.network/api/pairs"
-        response = requests.get(gmgn_api)
-        data = response.json()
+    headers = {
+        "x-chain": "solana",
+        "X-API-KEY": api_key
+    }
 
-        # contract address와 일치하는 토큰 찾기
-        matched = next((d for d in data if d.get("contractAddress", "").lower() == user_input.lower()), None)
+    response = requests.get(url, headers=headers)
 
-        if matched:
-            text = f"{matched['ticker']} - {matched['mc']}"
-        else:
-            text = f"해당 CA에 해당하는 토큰을 찾을 수 없습니다.\n입력값: {user_input}"
+    if response.status_code == 200:
+        data = response.json().get("data", {})
+        symbol = data.get("symbol")
+        market_cap = data.get("market_cap")
+        market_cap_formatted = format_market_cap(market_cap)
+        return symbol, market_cap_formatted
+    else:
+        print(f"Error: {response.status_code}, {response.text}")
+        return None, None
 
-        return jsonify({
-            "version": "2.0",
-            "template": {
-                "outputs": [{
-                    "simpleText": {"text": text}
-                }]
-            }
-        })
+# 예시 사용
+api_key = "여기에_너의_API_KEY_입력"
+contract = "9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E"  # soBTC
+symbol, mc = get_token_info(contract, api_key)
 
-    except Exception as e:
-        return jsonify({
-            "version": "2.0",
-            "template": {
-                "outputs": [{
-                    "simpleText": {
-                        "text": f"[오류] 서버 처리 중 문제 발생\n{str(e)}"
-                    }
-                }]
-            }
-        }), 500
-
-if __name__ == "__main__":
-    app.run(debug=True)
+print(f"Symbol: {symbol}")
+print(f"Market Cap: {mc}")
