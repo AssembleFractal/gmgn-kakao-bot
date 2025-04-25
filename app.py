@@ -14,8 +14,8 @@ def kakao_webhook():
         response = requests.get(gmgn_api)
         data = response.json()
 
-        # 입력값이 address랑 매칭되는 토큰 찾기
-        matched = next((d for d in data if d.get("ca", "").lower() == user_input.lower()), None)
+        # contract address와 일치하는 토큰 찾기
+        matched = next((d for d in data if d.get("contractAddress", "").lower() == user_input.lower()), None)
 
         if matched:
             text = f"{matched['ticker']} - {matched['mc']}"
@@ -37,7 +37,7 @@ def kakao_webhook():
             "template": {
                 "outputs": [{
                     "simpleText": {
-                        "text": f"[오류] 서버 처리 중 문제가 발생했습니다.\n{str(e)}"
+                        "text": f"[오류] 서버 처리 중 문제 발생\n{str(e)}"
                     }
                 }]
             }
